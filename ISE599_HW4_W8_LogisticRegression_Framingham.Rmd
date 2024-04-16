@@ -1,0 +1,1018 @@
+---
+title: "HW4: Logistic Regression"
+author: "ISE 599 Health Analytics      |||     Shree Vaishnavi Bacha"
+date: "Assigned: 02/29/2024     ||     Due: 3/21/2024"
+output:
+  pdf_document
+---
+
+```{r setup, include=FALSE}
+# set up .Rmd settings
+knitr::opts_chunk$set(echo = TRUE,
+                      message = FALSE,
+                      warning = FALSE)
+
+library(knitr)
+library(tidyverse)
+```
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(caret)
+library(ROCR)
+library(class)
+library(glmnet)
+library(caTools)
+library(pROC)
+```
+
+
+
+# Due Date and Submission
+
+Due: **Thursday March 21, 2024, 12pm**
+
+Use R Markdown to create this assignment. Print the .Rmd file to a single **pdf** document. If you have trouble printing to pdf you can also knit to html and convert the html file to pdf.
+
+**Please make sure your code chunks and output are printed in your pdf document**.  
+
+Please submit your single pdf file via **Gradescope**, and be sure to link each problem to the rubric.
+
+
+# Learning Objectives
+
+- Create and compare logistic regression models
+- Evaluate models according to multiple measures of performance and interpret results
+- Critically consider appropriateness of model for a specific research question or goal in the context of a health study
+
+
+# Points
+
+| Problem         | Points    |
+|:--------------- |:--------- |
+| Problem 1       |     10    |
+| Problem 2       |     15    |
+| Problem 3       |     10    |
+| Problem 4       |      20   |
+| Problem 5       |      45   |
+
+
+# Description
+
+In this homework, you will build logistic regression models of coronary heart disease risk from patient demographic and clinical characteristics. You will create classification models from your logistic regressions and evaluate the performance of these classifiers. You will consider trade-offs related to the cost of treatment with medication and the benefits to patients, in aggregate.
+
+## Framingham Heart Study
+
+Heart disease is the leading cause of death worldwide. About 17.9 million people died from coronary heart disease (CHD) in 2016 -- over 25% of all deaths that year across the globe.
+
+In 1928, the U.S. government started to track a cohort of people in Framingham, MA. The study comprised initially 5,209 participants, who were given a questionnaire and a medical exam every two years. Data were also collected on their physical and behavioral characteristics. Over the years, the study has grown to include multiple generations and more variables. This dataset is known as the *Framingham Heart Study*.
+
+The data is contained in the file `'framingham.csv'`. There are 3,658 observations, each corresponding to a participant. The 16 variables are described in the table below. The data has been cleaned so there are no missing values of any variables, and all values are correctly coded (that is, there are no implausible / impossible values that need to be removed).
+
+
+| **Variable **       | **Description **                                                                                     |
+|---------------------|------------------------------------------------------------------------------------------------------|
+| **male**            | Gender of patient (1 if male, 0 if female)                                                           |
+| **age**             | Age (in years) at first examination                                                                  |
+| **education**       | Some high school, high school/GED, some college/vocational school, college                           |
+| **currentSmoker**   | 1 if patient is a current smoker, 0 otherwise                                                        |
+| **cigsPerDay**      | Number of cigarettes per day                                                                         |
+| **BPMeds**          | 1 if patient is on blood pressure medication at time of first examination, 0 otherwise               |
+| **prevalentStroke** | 1 if patient previously had a stroke, 0 otherwise                                                    |
+| **prevalentHyp**    | 1 if patient is currently hypertensive, 0 otherwise                                                  |
+| **diabetes**        | 1 if patient currently has diabetes, 0 otherwise                                                     |
+| **totChol**         | Total cholesterol (mg/dL)                                                                            |
+| **sysBP**           | Systolic blood pressure                                                                              |
+| **diaBP**           | Diastolic blood pressure                                                                             |
+| **BMI**             | Body Mass Index: weight (kg)/height (m)2                                                             |
+| **heartRate**       | Heart rate (beats/minute)                                                                            |
+| **glucose**         | Blood glucose level (mg/dL)                                                                          |
+| **TenYearCHD**      | 1 if patient is experienced coronary heart disease within 10 years of first examination, 0 otherwise |
+
+To lower the risk of CHD, physicians can prescribe preventive medication that lowers blood pressure or cholesterol. Given the cost and possible side effects of preventive medications, these prescriptions require hard evidence on CHD risks. To support these decisions, you will predict whether a patient will experience CHD within 10 years of their first examination (`tenYearCHD`), and analyze risk factors.
+
+## Economic considerations
+
+A colleague of yours has just completed a health economics study to assess a recently approved medication. The study has estimated that patients who experience CHD within the next 10 years are expected to incur a lifetime cost of \$165,000 associated with the disease—including the costs of treatment (\$80,000) as well as lower quality of life and life expectancy (\$85,000). The study has determined that the medicine will lower patients’ risk of developing CHD within the next 10 years by a factor of 2.3. Regardless of whether a patient eventually develops CHD, the preventive medication costs \$7,500.
+
+
+# Questions
+
+## (1) Optimal decision rule [10 points]
+
+Determine the optimal decision rule regarding the decision of whether to prescribe medication given a patient's probability $p_i$ of developing CHD.
+
+**Hint:** Drawing a simple decision tree of the decision on whether to prescribe given the probability of developing CHD and the costs associated with each pathway can help you to calculate the expected probability of each decision and the tradeoff rule.
+
+*Solution-1:*
+
+
+To determine the optimal decision rule regarding the decision of whether to prescribe medication given a patient's probability 'p' of developing CHD, we can use a decision tree approach. Let's break down the decision tree and calculate the expected costs associated with each pathway:
+
+-> Patient does not receive medication (Do nothing):
+
+    a) If the patient does not develop CHD (prob = 1-p):
+
+      Cost = $0
+
+    b) If the patient develops CHD (prob = p):
+
+      Cost = $165,000
+
+
+
+-> Patient receives medication (Prescribe):
+
+    a) If the patient does not develop CHD (prob = 1-p/2.3):
+
+      Cost = $7,500 (cost of medication)
+
+
+    b) If the patient develops CHD (prob = p/2.3):
+
+      Cost = $172500 = (total cost = $7,500 + $165000)
+
+
+
+
+-> Optimal Decision Rule: Prescribe the medication if the expected cost of no medication exceeds the expected cost of medication.
+
+= (172500 * p/2.3) + 7500 - (7500 * p/2.3) < 165000p
+
+= *p > 0.08*
+
+
+*This means prescribe the medication only if the probability of developing the CHD (p_i / p) > 8%*
+
+
+```
+```
+
+
+
+## (2) EDA [10 points]
+
+- **(i) [1 point] Import the `framingham` data into R.**
+  - Check the data are correctly read in.
+  - Convert numeric variables to factor where appropriate.
+  
+*Solution-2(i):*
+
+```{r}
+#Loading the data
+library(here)
+HW4= here("/Users/shreevaishnavibacha/Desktop/ISE 599-HA/HW-4")
+framingham_data = read.csv(here(HW4,"framingham.csv"))
+str(framingham_data)
+head(framingham_data)
+summary(framingham_data)
+```
+
+
+```{r}
+#converting numeric variables to factors
+framingham_data$male = as.factor(framingham_data$male)
+unique(framingham_data$education)
+framingham_data$education = as.factor(framingham_data$education)
+framingham_data$currentSmoker = as.factor(framingham_data$currentSmoker)
+unique(framingham_data$BPMeds)
+framingham_data$BPMeds = as.factor(framingham_data$BPMeds)
+unique(framingham_data$prevalentStroke)
+framingham_data$prevalentStroke = as.factor(framingham_data$prevalentStroke)
+framingham_data$prevalentHyp = as.factor(framingham_data$prevalentHyp)
+framingham_data$diabetes = as.factor(framingham_data$diabetes)
+table(framingham_data$TenYearCHD)
+framingham_data$TenYearCHD = as.factor(framingham_data$TenYearCHD)
+
+#Check for missing values
+sum(is.na(framingham_data))
+
+#Checking the structure of the data after all the conversions
+str(framingham_data)
+```
+  
+  
+  
+  
+  
+- **(ii) [10 points] Investigate relationships between variables.**
+  - **(a)** For continuous predictors, create box plots of the variable vs. the binary outcome `tenYearCHD`. Comment on your results.
+  
+*Solution-ii(a):*
+
+
+```{r}
+library(ggplot2)
+library(gridExtra)
+
+# Create box plots for continuous predictors vs. TenYearCHD
+boxplot_age <- ggplot(framingham_data, aes(x = TenYearCHD, y = age, fill = TenYearCHD)) +
+  geom_boxplot() +
+  labs(x = "TenYearCHD", y = "Age") +
+  ggtitle("Box Plot of Age vs. TenYearCHD")
+boxplot_age
+
+boxplot_cigsperDay <- ggplot(framingham_data, aes(x=TenYearCHD, y=cigsPerDay, fill= TenYearCHD))+
+  geom_boxplot()+
+  labs(x="TenYearCHD" , y="cigsPerDay")+
+  ggtitle("Box Plot of CigsPerDay vs. TenYearCHD")
+boxplot_cigsperDay
+
+boxplot_totChol <- ggplot(framingham_data, aes(x = TenYearCHD, y = totChol, fill = TenYearCHD)) +
+  geom_boxplot() +
+  labs(x = "TenYearCHD", y = "Total Cholesterol") +
+  ggtitle("Box Plot of Total Cholesterol vs. TenYearCHD")
+boxplot_totChol
+
+boxplot_sysBP <- ggplot(framingham_data, aes(x = TenYearCHD, y = sysBP, fill = TenYearCHD)) +
+  geom_boxplot() +
+  labs(x = "TenYearCHD", y = "Systolic Blood Pressure") +
+  ggtitle("Box Plot of Systolic Blood Pressure vs. TenYearCHD")
+boxplot_sysBP
+
+boxplot_diaBP <- ggplot(framingham_data, aes(x = TenYearCHD, y = diaBP, fill = TenYearCHD)) +
+  geom_boxplot() +
+  labs(x = "TenYearCHD", y = "Diastolic Blood Pressure") +
+  ggtitle("Box Plot of Diastolic Blood Pressure vs. TenYearCHD")
+boxplot_diaBP 
+
+boxplot_BMI <- ggplot(framingham_data, aes(x = TenYearCHD, y = BMI, fill = TenYearCHD)) +
+  geom_boxplot() +
+  labs(x = "TenYearCHD", y = "BMI") +
+  ggtitle("Box Plot of BMI vs. TenYearCHD")
+boxplot_BMI
+
+boxplot_heartRate <- ggplot(framingham_data, aes(x = TenYearCHD, y = heartRate, fill = TenYearCHD)) +
+  geom_boxplot() +
+  labs(x = "TenYearCHD", y = "Heart Rate") +
+  ggtitle("Box Plot of Heart Rate vs. TenYearCHD")
+boxplot_heartRate
+
+boxplot_glucose <- ggplot(framingham_data, aes(x = TenYearCHD, y = glucose, fill = TenYearCHD)) +
+  geom_boxplot() +
+  labs(x = "TenYearCHD", y = "Glucose") +
+  ggtitle("Box Plot of Glucose vs. TenYearCHD")
+boxplot_glucose
+
+ # Arrange plots in a grid
+grid.arrange(boxplot_age,boxplot_cigsperDay, boxplot_totChol, boxplot_sysBP, boxplot_diaBP, boxplot_BMI, boxplot_heartRate, boxplot_glucose, nrow = 4)
+
+```
+
+
+*From the above box plots of all the continuous predictor variables w.r.t the response variable, we see that age variable has no outliers, i.e all the observations in this category are in the inter-quantile range only.*
+
+*All the other continuous predictor variables have outliers which are outside the inter-quantile range. But it is given in the description that the data is cleaned and there are no impossible values in the dataset. That means these outliers are exceptionally high/low values which are seen in rare observations, but are possible and correct values. Hence we do not modify any of these values here.*
+
+*Other observations are:*
+
+*-It is observed that the patients identified with CHD are generally older than the ones who have not experienced CHD. So because of this difference Age can be a good predictor.*
+
+*- The Diastolic Blood Pressure, Systolic Blood Pressure, and the Total Cholesterol have slightly higher range of values in the patients experiencing CHD than the ones who haven't experienced CHD.*
+
+*-The differences observed in other variables is negligible.*
+
+  
+  
+  - **(b)** For binary or categorical predictors, create tables of the *proportion* of each value within each level of the binary `tenYearCHD` outcome. Comment on your results. **Tip**: You can use the function `tbl_summary` from the `gtsummary` package to create a nice-looking paper-worthy table output. Make sure you are presenting the correct proportions as requested.
+  
+
+*Solution-ii(b):*
+
+```{r}
+
+library(gtsummary)
+
+# Define categorical variables
+categorical_vars <- c("male", "education", "currentSmoker", "BPMeds", "prevalentStroke", "prevalentHyp", "diabetes")
+
+# Create a tbl_summary object for categorical variables
+tbl_categorical <- tbl_summary(
+  data = framingham_data,
+  by = TenYearCHD,
+  missing = "no",
+  include = categorical_vars
+)
+
+# Print the table
+tbl_categorical
+```
+
+*Most of the values in these categorical variables do not show any pattern of distribution.*
+
+*An interesting thing to see is that 99% of the observations who experienced CHD within 10 years did not have any prevalent stroke at the first examination.*
+
+*Also very few observations, just around 6% of those who experienced CHD 10 years of first examination were having BPMeds, or Diabetes.*
+
+*There seems to be equal number of observations who are currently facing hypertension, who have experienced CHD within 10 years of first examination.*
+
+
+
+  - **(c)** Investigate the correlation between predictor variables, which could lead to multicollinearity and affect parameter estimation and interpretation, by applying:
+    - Pearson's correlation coefficient between continuous predictor variables
+    - Spearman's Rank Correlation Coefficient between ordinal and continuous variables. **Hint:** For this you can use the `cor()` function, except you will need to rank the value of the ordinal variable (i.e., `rank(ordinalVar)`) and use the option `method="spearman"`.
+    - Comment on the implications of your results in regard to the assumption of no multicollinearity in logistic regression.
+    
+*Solution-ii(c):*
+
+```{r}
+# Calculate Pearson's correlation coefficient between continuous predictor variables
+continuous_vars <- c("age", "cigsPerDay", "totChol", "sysBP", "diaBP", "BMI", "heartRate", "glucose")
+pearson_corr <- cor(framingham_data[, continuous_vars], method = "pearson")
+
+# Calculate Spearman's rank correlation coefficient between ordinal and continuous variables
+ordinal_vars <- c("education")
+spearman_corr <- cor(rank(framingham_data[, ordinal_vars]), framingham_data[, continuous_vars], method = "spearman")
+
+# Print correlation matrices
+print("Pearson's correlation coefficient:")
+print(pearson_corr)
+library(corrplot)
+corrplot(pearson_corr, addCoef.col = "red")
+
+print("Spearman's rank correlation coefficient:")
+print(spearman_corr)
+corrplot(spearman_corr, addCoef.col = "red")
+```
+
+*For Spearman's correlation coefficient, it's typically applied when one or both of the variables being correlated are ordinal or ranked. If we have ordinal categorical variables (e.g., education) and we suspect they may have a monotonic relationship with the continuous predictors, then it would be appropriate to calculate Spearman's correlation coefficient between them.*
+
+*if we have nominal categorical variables (e.g., male, currentSmoker, BPMeds, prevalentStroke, prevalentHyp, diabetes), Spearman's correlation is not appropriate because these variables do not have a natural ordering.*
+
+
+
+
+FINDINGS:
+
+Pearson's correlation coefficient:
+
+*- The correlation coefficients between continuous predictor variables are generally low to moderate, ranging from approximately -0.19 to 0.39. This indicates that there is no strong linear correlation among the continuous predictor variables.*
+
+*-However, some correlations are noteworthy, such as the correlation between sysBP and diaBP (0.79), indicating a relatively strong positive linear relationship between systolic and diastolic blood pressure.*
+
+*-Overall, the low to moderate correlations suggest that multicollinearity may not be a significant concern among the continuous predictor variables.*
+
+
+Spearman's rank correlation coefficient:
+
+*- Overall, the Spearman's rank correlation coefficients suggest weak monotonic relationships between the ordinal variable education and the continuous variables age, cigsPerDay, totChol, sysBP, diaBP, BMI, heartRate, and glucose. These relationships are not very strong, but they indicate some tendency for the values of one variable to change with the values of the other variable.*
+    
+    
+    
+->In logistic regression, multicollinearity among predictor variables can inflate standard errors, leading to imprecise parameter estimates and potentially misleading interpretations of the coefficients. However, based on the correlation results obtained, there doesn't appear to be strong evidence of multicollinearity among the continuous predictor variables.
+
+->It's important to note that while the correlation analysis provides insights into potential multicollinearity, it's not definitive proof of multicollinearity. Further diagnostic tests, such as variance inflation factors (VIFs), should be conducted to assess multicollinearity more rigorously before drawing conclusions about its impact on logistic regression.
+    
+    
+    
+- **(iii) [2 points] Density plots.**
+  - Using two variables of your choice, construct conditional density plots to visualize the impact of the two factors on the patients’ propensity to develop CHD. Comment on your results. 
+  
+  
+*Solution (iii):*
+
+```{r}
+# Conditional density plot for age and CHD
+ggplot(framingham_data, aes(x = age, fill = TenYearCHD)) +
+  geom_density(alpha = 0.5) +
+  labs(x = "Age", y = "Density", fill = "TenYearCHD") +
+  ggtitle("Conditional Density Plot of Age vs. TenYearCHD")
+```
+  
+```{r}
+# Without position = 'fill' argument
+framingham_data %>%
+  ggplot() +
+  geom_histogram(aes(x=age,
+                     fill=(TenYearCHD==1))) +
+  theme_bw() +
+  xlab('Age in years') +
+  ylab('Frequency') +
+  theme(axis.title=element_text(size=18), 
+        axis.text=element_text(size=18), 
+        legend.text=element_text(size=18)) +
+  scale_fill_manual(name='', 
+                    labels=c('CHD Not Experienced', 'CHD Experienced'), 
+                    values=c('grey60', 'red'))
+```
+
+*-> From the above plot, it is clear that as the age increases there is more chance of experiencing the Coronary Heart Disease. There are more number of observation who experienced Ten Year CHD within 10 years of first examination in the age limit of 65-70.*
+
+
+```{r}
+# Conditional density plot for glucose and CHD
+ggplot(framingham_data, aes(x = sysBP, fill = TenYearCHD)) +
+  geom_density(alpha = 0.5) +
+  labs(x = "SysBP", y = "Density", fill = "TenYearCHD") +
+  ggtitle("Conditional Density Plot of SysBP vs. TenYearCHD")
+```
+
+```{r}
+# With position = 'fill' argument
+framingham_data %>%
+  ggplot() +
+  geom_histogram(aes(x=sysBP,
+                     fill=(TenYearCHD==1)),
+                 position = 'fill') +
+  theme_bw() +
+  xlab('Systolic Blood Pressure') +
+  ylab('Frequency') +
+  theme(axis.title=element_text(size=18), 
+        axis.text=element_text(size=18), 
+        legend.text=element_text(size=18)) +
+  scale_fill_manual(name='', 
+                    labels=c('CHD Not Experienced', 'CHD Experienced'), 
+                    values=c('grey60', 'red'))
+```
+
+
+*-> From the above plot, it is clear that the observations with higher Systolic Blood Pressure have greater number of them experiencing CHD within 10 years of first examination. Also all the observations with the highest sysBP have experienced the CHD within the 10 years of first examination.*
+
+
+
+- **(iv) [2 points] Train/test data split**. Use stratified sampling to split the data randomly into a training set (containing 70% of the data) and a test set (containing the remaining 30% of the data). Use `set.seed(101)`
+
+*Solution(iv):*
+
+```{r}
+table(framingham_data$TenYearCHD)
+```
+
+We can see that the response variable is imbalanced and hence we need to do stratified sampling.
+
+```{r}
+library(caTools)
+
+# Set seed for reproducibility
+set.seed(101)
+
+# Create indices for stratified sampling
+train_indices <- sample.split(framingham_data$TenYearCHD,0.7)
+
+# Split the data into training and test sets
+train_data <- framingham_data[train_indices, ]
+test_data <- framingham_data[!train_indices, ]
+```
+
+```{r}
+#Train Data
+head(train_data)
+str(train_data)
+table(train_data$TenYearCHD)
+#Test Data
+str(test_data)
+table(test_data$TenYearCHD)
+```
+
+## (3) Baseline Model [10 points]
+
+- **(i) [6 points] Full logistic regression model.** Using all the independent variables in the dataset, construct a logistic regression model to predict the probability that a patient will experience CHD within the next 10 years. Interpret and describe the estimated coefficients for `age` and `diabetes` in terms of percentage change in the odds of CHD.**
+
+*Solution-3(i):*
+
+```{r}
+#Full Logistic Regression Model
+full_logmodel = glm(TenYearCHD ~., data=train_data, family=binomial)
+summary(full_logmodel)
+```
+
+Interpretation:
+
+*-Age('age'): The coefficient estimate for age is approximately 0.06, with a standard error of 0.008 and a significant z-value (p < 0.001). This means that for each one-year increase in age, the log odds of experiencing CHD within the next 10 years increase by approximately 0.061, holding all other variables constant.*
+
+```{r}
+# Odds Ratio=\(exp^{coefficient estimate} -1 )*100*
+```
+*- So, for age, the odds ratio would be approximately 6.18545.This odds ratio indicates that for each one-year increase in age, the odds of developing CHD increase by approximately 6.18545 times, holding all other variables constant.*
+
+
+*Diabetes: In this case, the coefficient estimate for diabetes is approximately -0.065190. This means that for each one-unit increase in the variable diabetes (where 1 represents the presence of diabetes), the log odds of experiencing CHD within the next 10 years decrease by approximately 0.065190, holding all other variables constant.*
+
+```{r}
+#Pr(TenYearCHD = Yes|Diabetes =Yes) = \exp^{-8.397393+ (-0.065190 * 1)} / 1 +
+#\exp^{-8.397393+ (-0.065190 * 1)} = 2.11 * 10 ^ (-4)
+
+
+
+
+#Pr(TenYearCHD = Yes|Diabetes =No) = \exp^{-8.397393+ (-0.065190 * 0)} / 1 + 
+#\exp^{-8.397393+ (-0.065190 * 0)} = 2.25 * 10 ^ (-4)
+```
+
+*This indicates that slightly more patients without Diabetes are experiencing the CHD within 10 years of first examination than those patients with Diabetes. But the difference in the values of these probabilities is very very minimal. This is also visible as the p-value for diabetes is very high showing that it is not significant in the model.*
+
+
+- **(ii) [2 points] Make a single prediction**. What is the probability of developing CHD for a man of age 65, college educated, who does not smoke, does not take BP meds, has not had a stroke, does not have hypertension, does not have diabetes, has a cholesterol level of 200, systolic BP of 110, diastolic BP of 90, BMI of 30, heart rate of 90, glucose level of 110? For a woman with the same values for all other variables?
+
+*Solution 3(ii):*
+
+```{r}
+# Define the predictor values for the man
+new_data_man <- data.frame(
+  male = '1',                    # Male
+  age = 65,                    # Age 65
+  education = "College",       # College educated
+  currentSmoker = '0',           # Does not smoke
+  cigsPerDay = 0,
+  BPMeds = '0',                  # Does not take BP meds
+  prevalentStroke = '0',         # Has not had a stroke
+  prevalentHyp = '0',            # Does not have hypertension
+  diabetes = '0',                # Does not have diabetes
+  totChol = 200,               # Total cholesterol level of 200
+  sysBP = 110,                 # Systolic BP of 110
+  diaBP = 90,                  # Diastolic BP of 90
+  BMI = 30,                    # BMI of 30
+  heartRate = 90,              # Heart rate of 90
+  glucose = 110                # Glucose level of 110
+)
+
+# Predict probability of developing CHD for the man
+chd_prob_man <- predict(full_logmodel, newdata = new_data_man, type = "response")
+
+# Print the probability
+cat("Probability of developing CHD for a man:", chd_prob_man, "\n")
+
+# Define the predictor values for the woman
+new_data_woman <- data.frame(
+  male = '0',                    # Female
+  age = 65,                    # Age 65
+  education = "College",       # College educated
+  currentSmoker = '0',           # Does not smoke
+  cigsPerDay = 0,
+  BPMeds = '0',                  # Does not take BP meds
+  prevalentStroke = '0',         # Has not had a stroke
+  prevalentHyp = '0',            # Does not have hypertension
+  diabetes = '0',                # Does not have diabetes
+  totChol = 200,               # Total cholesterol level of 200
+  sysBP = 110,                 # Systolic BP of 110
+  diaBP = 90,                  # Diastolic BP of 90
+  BMI = 30,                    # BMI of 30
+  heartRate = 90,              # Heart rate of 90
+  glucose = 110                # Glucose level of 110
+)
+
+# Predict probability of developing CHD for the woman
+chd_prob_woman <- predict(full_logmodel, newdata = new_data_woman, type = "response")
+
+# Print the probability
+cat("Probability of developing CHD for a woman:", chd_prob_woman, "\n")
+
+```
+
+*Probability or developing CHD is higher in a man than a woman with the similar characteristics.*
+
+
+
+- **(iii) [2 points] Sensitivity plot**. Create a plot of the sensitivity of the probability of developing 10 year CHD to age, for men and women separately. Fix the value of all other variables for the sensitivity plot.
+
+*Solution 3(iii):*
+
+```{r}
+#Define the predictor values for the sensitivity plot (keeping other variables constant)
+sensitivity_data <- data.frame(
+  male = rep(c('0', '1'), each = 1000),  # 1000 observations for men and 1000 for women
+  age = rep(seq(20, 80, length.out = 1000), times = 2),  # Varying ages from 20 to 80
+  education = "College",  # Assuming college education for both men and women
+  currentSmoker = '0',  # Assuming non-smokers for both men and women
+  cigsPerDay = 0,
+  BPMeds = '0',  # Assuming no BP medications for both men and women
+  prevalentStroke = '0',  # Assuming no previous stroke for both men and women
+  prevalentHyp = '0',  # Assuming no prevalent hypertension for both men and women
+  diabetes = '0',  # Assuming no diabetes for both men and women
+  totChol = 200,  # Assuming total cholesterol level of 200 for both men and women
+  sysBP = 110,  # Assuming systolic BP of 110 for both men and women
+  diaBP = 90,  # Assuming diastolic BP of 90 for both men and women
+  BMI = 30,  # Assuming BMI of 30 for both men and women
+  heartRate = 90,  # Assuming heart rate of 90 for both men and women
+  glucose = 110  # Assuming glucose level of 110 for both men and women
+)
+
+# Predict probability of developing CHD for men and women separately
+sensitivity_data$chd_prob <- predict(full_logmodel, newdata = sensitivity_data, type = "response")
+
+# Plot sensitivity of probability to age for men and women separately
+library(ggplot2)
+ggplot(sensitivity_data, aes(x = age, y = chd_prob, color = factor(male))) +
+  geom_line() +
+  labs(x = "Age", y = "Probability of developing 10-year CHD", color = "Gender") +
+  ggtitle("Sensitivity of Probability to Age (Men vs. Women)") +
+  scale_color_manual(values = c("blue", "red"), labels = c("Female", "Male")) +
+  theme_minimal()
+
+```
+
+*The sensitivity plot shows that men are at higher risk of experiencing CHD than the woman with same lifestyle and characteristics.*
+
+
+## (4) Regularization [20 points]
+
+You aim to improve your model using Lasso. Perform 5-fold cross-validation, 10-fold cross-validation,
+and leave-one-out cross-validation (LOOCV), using the AUC as your performance metric. **Note**: In this assignment, you don't have to worry about the fact that the lasso algorithm will not group levels of categorical variables. 
+
+- **(i) [5 points] For each cross-validation instance, report the computational time.**
+- **(ii) [5 points] For each cross-validation instance, plot the outputs.**
+- **(iii) [5 points] For each cross-validation instance, report the selected value of $\lambda$ for both the best lambda and the lambda at the 1se rule.**
+- **(iv) [5 points] Report the variables included in the model obtained with the best $\lambda$.**
+
+**Hint**: The computational time of a procedure can be obtained by applying the `Sys.time()` command before and after the procedure and subtracting the two values.
+
+*Solution-4:*
+
+
+```{r}
+library(Matrix)
+library(glmnet)
+
+x.train = model.matrix(TenYearCHD ~ ., data=train_data)   
+y.train = train_data$TenYearCHD
+x.test = model.matrix(TenYearCHD ~ ., data=test_data)
+y.test = test_data$TenYearCHD
+
+
+# Perform Lasso regularization with 5-fold cross-validation
+cv_5fold <- cv.glmnet(x.train, y.train, alpha = 1,family="binomial", nfolds = 5, type.measure = "auc")
+
+# Perform Lasso regularization with 10-fold cross-validation
+cv_10fold <- cv.glmnet(x.train, y.train, alpha = 1, family="binomial", nfolds = 10, type.measure = "auc")
+
+# Perform Lasso regularization with leave-one-out cross-validation (LOOCV)
+cv_loocv <- cv.glmnet(x.train, y.train, alpha = 1, family="binomial",  nfolds = nrow(x.train), type.measure = "auc")
+
+# (i) Report computational time
+time_5fold <- system.time({
+  cv_5fold <- cv.glmnet(x.train, y.train, alpha = 1,family="binomial", nfolds = 5, type.measure = "auc")
+})[3]
+
+time_10fold <- system.time({
+  cv_10fold <- cv.glmnet(x.train, y.train, alpha = 1, family="binomial", nfolds = 10, type.measure = "auc")
+})[3]
+
+time_loocv <- system.time({
+  cv_loocv <- cv.glmnet(x.train, y.train, alpha = 1, family="binomial",  nfolds = nrow(x.train), type.measure = "auc")
+})[3]
+
+# (ii) Plot the outputs
+plot(cv_5fold)
+plot(cv_10fold)
+plot(cv_loocv)
+
+# (iii) Report selected lambda values
+
+#Best lambda
+best_lambda_5fold <- cv_5fold$lambda.min
+best_lambda_10fold <- cv_10fold$lambda.min
+best_lambda_loocv <- cv_loocv$lambda.min
+
+
+#Best lambda at 1SE
+lambda_1se_5fold <- cv_5fold$lambda.1se
+lambda_1se_10fold <- cv_10fold$lambda.1se
+lambda_1se_loocv <- cv_loocv$lambda.1se
+
+
+# (iv) Report variables included in the model obtained with the best lambda
+lasso_model_5fold <- glmnet(x.train, y.train, alpha = 1, family="binomial", lambda = best_lambda_5fold)
+lasso_model_10fold <- glmnet(x.train, y.train, alpha = 1, family="binomial",lambda = best_lambda_10fold)
+lasso_model_loocv <- glmnet(x.train, y.train, alpha = 1,  family="binomial",lambda = best_lambda_loocv)
+
+# Extract variable names
+variables_5fold <- rownames(coef(lasso_model_5fold))
+variables_10fold <- rownames(coef(lasso_model_10fold))
+variables_loocv <- rownames(coef(lasso_model_loocv))
+
+# Print results
+print("Computational time (seconds):")
+print(paste("5-fold CV:", time_5fold))
+print(paste("10-fold CV:", time_10fold))
+print(paste("LOOCV:", time_loocv))
+
+print("Selected lambda values:")
+print(paste("5-fold CV - Best lambda:", best_lambda_5fold))
+print(paste("5-fold CV - Lambda at 1se rule:", lambda_1se_5fold))
+print(paste("10-fold CV - Best lambda:", best_lambda_10fold))
+print(paste("10-fold CV - Lambda at 1se rule:", lambda_1se_10fold))
+print(paste("LOOCV - Best lambda:", best_lambda_loocv))
+print(paste("LOOCV - Lambda at 1se rule:", lambda_1se_loocv))
+
+cat("Variables included in the model obtained with the best lambda:\n")
+cat("5-fold CV:\n")
+for (variable in variables_5fold[which(coef(lasso_model_5fold) != 0)]) {
+  cat(variable, "\n")
+}
+cat("10-fold CV:\n")
+for (variable in variables_10fold[which(coef(lasso_model_10fold) != 0)]) {
+  cat(variable, "\n")
+}
+cat("LOOCV:\n")
+for (variable in variables_loocv[which(coef(lasso_model_loocv) != 0)]) {
+  cat(variable, "\n")
+}
+```
+
+
+
+
+
+
+
+## (5) Build predictions on the test set [45 points]
+
+Using the full model from Question (3) and the one obtained with 10-fold cross-validation in Question (4),  
+
+Let $\hat{p}_i$ be the estimated probability that patient $i$ will develop CHD.
+Let $\alpha$ be the threshold such that medication is prescribed to all patients $i$ satisfying $\hat{p}_i \geq \alpha$.
+
+Assess the following four models:
+
+1. Model obtained with lasso and 10-fold CV in Question (4)
+2. Full model from Question (3)
+3. "Baseline" practice, under which no medication is prescribed
+4. "Ideal" practice, in which medication is only prescribed to patients that will eventually go on to develop CHD, assuming perfect knowledge of the test set.
+
+Compute the following
+
+- **(i) [10 points] Plot the number of patients treated as a function of $\alpha$, for all 4 models**
+- **(ii) [15 points] Plot the expected cost for all patients in the test set as a function of $\alpha$ for all 4 models. Be sure to account for the decrease in the risk of developing CHD given medication.**
+- **(iii) [5 points] Plot the Receiver Operating Characteristics curve for the lasso and full models**
+- **(iv) [5 points] Report the Area under the Curve for the lasso and full models**
+
+Integrating across the 4 models:
+
+- **(v) [10 points] Comment briefly on your results.** Which model and choice of threshold of probability of developing CHD would you recommend from a public health economics perspective? From a clinical perspective?
+
+*Solution-5*
+
+
+
+
+```{r}
+# Define a function to compute the number of patients treated
+compute_treated <- function(probabilities, threshold) {
+  treated <- sum(probabilities > threshold)
+  return(treated)
+}
+
+
+# Define a function to compute the expected cost
+compute_expected_cost <- function(probabilities, threshold) {
+  # Cost of medication
+  cost_medication <- 7500
+  # Cost of CHD without medication
+  cost_chd_no_medication <- 165000
+  # Cost of CHD with medication
+  cost_chd_medication <- 172500
+  
+  # Number of patients
+  n <- length(probabilities)
+  
+  # Compute expected costs
+  expected_cost <- sum(ifelse(probabilities <= threshold, cost_chd_no_medication * probabilities,
+                              cost_chd_medication * probabilities + cost_medication)) / n
+  
+  return(expected_cost)
+}
+
+
+
+# Compute probabilities for each model (using test set or validation set)
+probabilities_lasso <- predict(cv_10fold, s = "lambda.min", newx = x.test, type = "response")
+probabilities_full <- predict(full_logmodel, newdata = test_data, type = "response")
+
+
+# Compute number of patients treated and expected cost for each model
+threshold <- 0.08 #as calculated in the optimal decision rule in question 1.
+treated_lasso <- compute_treated(probabilities_lasso, threshold)
+treated_full <- compute_treated(probabilities_full, threshold)
+
+expected_cost_lasso <- compute_expected_cost(probabilities_lasso, threshold)
+expected_cost_full <- compute_expected_cost(probabilities_full, threshold)
+
+# Print number of patients treated and expected cost for each model
+print("Number of patients treated:")
+print(paste("Model obtained with Lasso and 10-fold CV:", treated_lasso))
+print(paste("Full logistic regression model:", treated_full))
+
+print("Expected cost for all patients in the test set:")
+print(paste("Model obtained with Lasso and 10-fold CV:", expected_cost_lasso))
+print(paste("Full logistic regression model:", expected_cost_full))
+
+# Plot ROC curves for Lasso and full logistic regression models
+roc_lasso <- roc(y.test, probabilities_lasso)
+roc_full <- roc(y.test, probabilities_full)
+plot(roc_lasso, col = "blue", main = "ROC Curve", legacy.axes = TRUE, print.auc = TRUE)
+lines(roc_full, col = "red")
+legend("bottomright", legend = c("Lasso Model", "Full Logistic Regression Model"), col = c("blue", "red"), lty = 1)
+
+
+# Calculate AUC for Lasso and full logistic regression models
+auc_lasso <- auc(roc_lasso)
+auc_full <- auc(roc_full)
+print(paste("Area under the Curve (AUC) for Lasso model:", auc_lasso))
+print(paste("Area under the Curve (AUC) for Full logistic regression model:", auc_full))
+
+```
+
+
+
+
+
+
+```{r}
+#(i)
+
+# Define a range of alpha values
+alphas <- seq(0, 1, by = 0.01)
+
+# Initialize vectors to store the number of treated patients for each model
+treated_lasso <- numeric(length(alphas))
+treated_full <- numeric(length(alphas))
+treated_baseline <- rep(0, length(alphas))
+treated_ideal <- rep(0, length(alphas))
+
+# Compute the number of treated patients for each alpha value
+for (i in 1:length(alphas)) {
+  treated_lasso[i] <- sum(probabilities_lasso >= alphas[i])
+  treated_full[i] <- sum(probabilities_full >= alphas[i])
+}
+
+
+# Number of treated patients in the ideal model (equal to the number of patients with CHD in the test set)
+for (i in 1:length(alphas)) {
+  treated_ideal[i] <- sum(y.test == 1)
+}
+
+
+# Plot the number of patients treated as a function of alpha for all 4 models
+plot(alphas, treated_lasso, type = "l", col = "blue", xlab = "Alpha", ylab = "Number of Patients Treated",
+     main = "Number of Patients Treated vs. Alpha")
+lines(alphas, treated_full, type = "l", col = "red")
+lines(alphas, treated_baseline, type = "l", col = "green")
+lines(alphas, treated_ideal, type = "l", col = "orange")
+legend("topright", legend = c("Lasso Model", "Full Model", "Baseline", "Ideal"), 
+       col = c("blue", "red", "green", "orange"), lty = 1, cex = 0.8)
+
+```
+
+
+
+```{r}
+#(ii)
+# Define a range of alpha values
+alphas <- seq(0, 1, by = 0.01)
+
+# Initialize vectors to store the expected costs for each model
+expected_cost_lasso <- numeric(length(alphas))
+expected_cost_full <- numeric(length(alphas))
+expected_cost_baseline <- numeric(length(alphas))
+expected_cost_ideal <- numeric(length(alphas))
+
+# Define the costs associated with CHD and medication
+cost_medication <- 7500
+cost_chd_no_medication <- 165000
+cost_chd_medication <- 172500
+risk_reduction <- 2.3  # Risk reduction factor due to medication
+
+# Compute the expected cost for each alpha value for each model
+for (i in 1:length(alphas)) {
+  # Compute the probabilities of developing CHD with and without medication
+  probabilities_lasso_with_medication <- ifelse(probabilities_lasso >= alphas[i], 
+                                                probabilities_lasso / risk_reduction, probabilities_lasso)
+  probabilities_full_with_medication <- ifelse(probabilities_full >= alphas[i], 
+                                               probabilities_full / risk_reduction, probabilities_full)
+  
+  # Compute the expected cost for each model
+  expected_cost_lasso[i] <- compute_expected_cost(probabilities_lasso_with_medication, alphas[i])
+  expected_cost_full[i] <- compute_expected_cost(probabilities_full_with_medication, alphas[i])
+  expected_cost_baseline[i] <- compute_expected_cost(rep(0, length(y.test)), alphas[i])
+}
+
+# Compute the expected cost for the ideal model
+expected_cost_ideal <- numeric(length(alphas))
+for (i in 1:length(alphas)) {
+  # Compute the expected cost considering only the cost of medication for patients who will develop CHD
+  expected_cost_ideal[i] <- sum(y.test == 1 & y.test == 1) * cost_medication / length(y.test)
+}
+
+# Plot the expected cost as a function of alpha for all 4 models
+plot(alphas, expected_cost_lasso, type = "l", col = "blue", xlab = "Alpha", ylab = "Expected Cost",
+     main = "Expected Cost vs. Alpha", ylim = c(0, max(c(expected_cost_lasso, expected_cost_full))))
+lines(alphas, expected_cost_full, type = "l", col = "red")
+lines(alphas, expected_cost_baseline, type = "l", col = "green")
+lines(alphas, expected_cost_ideal, type = "l", col = "orange")
+legend("right", legend = c("Lasso Model", "Full Model", "Baseline", "Ideal"), 
+       col = c("blue", "red", "green", "orange"), lty = 1, cex = 0.8)
+```
+
+
+
+```{r}
+#(iii)
+
+# Plot ROC curves for Lasso and full models
+roc_lasso <- roc(y.test, probabilities_lasso)
+roc_full <- roc(y.test, probabilities_full)
+plot(roc_lasso, col = "blue", main = "ROC Curve", legacy.axes = TRUE, print.auc = TRUE)
+lines(roc_full, col = "red")
+legend("bottomright", legend = c("Lasso Model", "Full Logistic Regression Model"), col = c("blue", "red"), lty = 1)
+
+
+```
+
+```{r}
+#(iv)
+
+# Calculate AUC for Lasso and full models
+auc_lasso <- auc(roc_lasso)
+auc_full <- auc(roc_full)
+print(paste("Area under the Curve (AUC) for Lasso model:", auc_lasso))
+print(paste("Area under the Curve (AUC) for Full logistic regression model:", auc_full))
+
+```
+
+
+
+
+*(v).*
+
+MODEL: 
+
+*-From a public health economics perspective, the choice of model and threshold depends on the balance between the number of patients treated and the expected cost. The ideal model would minimize the number of patients treated while minimizing the expected cost.*
+
+*-From a clinical perspective, the choice of model and threshold should prioritize patient outcomes, ensuring that patients at high risk of developing CHD receive appropriate treatment while minimizing unnecessary treatment for low-risk patients.*
+
+*-From a public health economics perspective: The Lasso model outperforms the full logistic regression model, as indicated by its slightly higher Area under the Curve (AUC) value. Also in this perspective a model with fewer variables is always better when the models have similar predictive performance. Therefore, from a public health economics perspective, where efficient allocation of resources is crucial, the Lasso model would be recommended due to its superior predictive performance.*
+
+*-From the clinical perspective also the Lasso outperforms the logistic regression model, because it helps identify slightly higher number of patients with CHD than the Full logistic model. This suggests that the Lasso model has better discriminatory power in identifying individuals at risk of developing CHD.*
+
+
+
+
+```{r}
+#METRICS for LASSO MODEL
+
+# Determine the optimal threshold (e.g., using Youden's J statistic)
+roc_obj <- roc(y.test, probabilities_lasso)
+optimal_threshold <- coords(roc_obj, "best", best.method = "youden")$threshold
+optimal_threshold
+# Apply the threshold to classify individuals
+predicted_classes <- ifelse(probabilities_lasso >= optimal_threshold, 1, 0)
+
+# Evaluate the performance of the model
+confusion_matrix <- table(predicted_classes, y.test)
+confusion_matrix
+accuracy <- sum(diag(confusion_matrix)) / sum(confusion_matrix)
+accuracy
+sensitivity <- confusion_matrix[2, 2] / sum(confusion_matrix[2, ])
+sensitivity
+specificity <- confusion_matrix[1, 1] / sum(confusion_matrix[1, ])
+specificity
+```
+
+
+```{r}
+
+#METRICS FOR FULL MODEL
+
+# Determine the optimal threshold (e.g., using Youden's J statistic)
+roc_obj <- roc(test_data$TenYearCHD, probabilities_full)
+optimal_threshold <- coords(roc_obj, "best", best.method = "youden")$threshold
+optimal_threshold
+# Apply the threshold to classify individuals
+predicted_classes <- ifelse(probabilities_lasso >= optimal_threshold, 1, 0)
+
+# Evaluate the performance of the model
+confusion_matrix <- table(predicted_classes, y.test)
+confusion_matrix
+accuracy <- sum(diag(confusion_matrix)) / sum(confusion_matrix)
+accuracy
+sensitivity <- confusion_matrix[2, 2] / sum(confusion_matrix[2, ])
+sensitivity
+specificity <- confusion_matrix[1, 1] / sum(confusion_matrix[1, ])
+specificity
+```
+
+
+```{r}
+#METRICS for LASSO MODEL at threshold 0.08(calculated in the beginning)
+
+# Apply the threshold to classify individuals
+predicted_classes <- ifelse(probabilities_lasso >= 0.08, 1, 0)
+
+# Evaluate the performance of the model
+confusion_matrix <- table(predicted_classes, y.test)
+confusion_matrix
+accuracy <- sum(diag(confusion_matrix)) / sum(confusion_matrix)
+accuracy
+sensitivity <- confusion_matrix[2, 2] / sum(confusion_matrix[2, ])
+sensitivity
+specificity <- confusion_matrix[1, 1] / sum(confusion_matrix[1, ])
+specificity
+```
+
+
+CHOICE of threshold
+
+*-From a clinical perspective, as correctly identifying patients at risk of developing CHD is the primary concern, the threshold determined by the Lasso model may be more suitable due to its higher sensitivity. The threshold of 0.08 calculated initially can be used. As we see above though the model has lower accuracy but it can be used to develop a more aggressive model. And hence as we see it identifies the maximum number of patients who developed CHD within 10 years which is the most important from the clinical perspective.*
+
+*-From the public economic health perspective, the lasso model with the calculated optimal threshold of 0.1613576 (as shown above) can be used. This model identifies considerably higher number of patients with CHD than the Full logistic model. Also the accuracy of the model is good enough which results in a good balance between correct classification and cost management, which are important from the public economic health perspective. Hence this threshold can help balance the number of patients treated and the cost.*
