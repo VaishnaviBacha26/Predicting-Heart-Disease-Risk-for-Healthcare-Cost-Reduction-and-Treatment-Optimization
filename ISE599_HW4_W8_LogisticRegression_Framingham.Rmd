@@ -1,7 +1,7 @@
 ---
-title: "HW4: Logistic Regression"
+title: "Logistic Regression"
 author: "ISE 599 Health Analytics      |||     Shree Vaishnavi Bacha"
-date: "Assigned: 02/29/2024     ||     Due: 3/21/2024"
+date: " Due: 3/21/2024"
 output:
   pdf_document
 ---
@@ -28,34 +28,12 @@ library(pROC)
 ```
 
 
-
-# Due Date and Submission
-
-Due: **Thursday March 21, 2024, 12pm**
-
-Use R Markdown to create this assignment. Print the .Rmd file to a single **pdf** document. If you have trouble printing to pdf you can also knit to html and convert the html file to pdf.
-
-**Please make sure your code chunks and output are printed in your pdf document**.  
-
-Please submit your single pdf file via **Gradescope**, and be sure to link each problem to the rubric.
-
-
 # Learning Objectives
 
 - Create and compare logistic regression models
 - Evaluate models according to multiple measures of performance and interpret results
 - Critically consider appropriateness of model for a specific research question or goal in the context of a health study
 
-
-# Points
-
-| Problem         | Points    |
-|:--------------- |:--------- |
-| Problem 1       |     10    |
-| Problem 2       |     15    |
-| Problem 3       |     10    |
-| Problem 4       |      20   |
-| Problem 5       |      45   |
 
 
 # Description
